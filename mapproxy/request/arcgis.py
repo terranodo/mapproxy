@@ -97,6 +97,14 @@ class ArcGISRequest(BaseRequest):
         if not self.url.endswith("export"):
             self.url += "/export"
 
+        # if it's an ImageServer, make sure it uses exportImage
+        if 'ImageServer' in url:
+            self.url +="Image"
+            # Append a few things to fixed_params, like
+            self.fixed_params['noDataInterpretation']='esriNoDataMatchAny'
+            self.fixed_params['interpolation']='+RSP_BilinearInterpolation'
+            self.fixed_params['pixelType']='F32'
+
     def copy(self):
         return self.__class__(param=self.params.copy(), url=self.url)
 
