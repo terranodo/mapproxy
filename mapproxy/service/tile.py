@@ -203,6 +203,7 @@ class TileServer(Server):
         template = get_template(self.root_resource_template_file)
         return template.substitute(service=bunch(default='', **service))
 
+
 class TileLayer(object):
     def __init__(self, name, title, md, tile_manager, dimensions=None):
         """
