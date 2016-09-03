@@ -190,7 +190,6 @@ def load_config(config, config_file=None, config_dict=None, clear_existing=False
     if clear_existing:
         for key in list(config.keys()):
             del config[key]
-
     if config_dict is None:
         config_dict = load_yaml_file(config_file)
 
