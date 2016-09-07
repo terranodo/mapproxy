@@ -290,6 +290,20 @@ ogc_service_md = {
     ],
 }
 
+band_source = {
+    required('source'): str(),
+    required('band'): int,
+    'factor': number(),
+}
+
+band_sources = {
+    'r': [band_source],
+    'g': [band_source],
+    'b': [band_source],
+    'a': [band_source],
+    'l': [band_source],
+}
+
 mapproxy_yaml_spec = {
     '__config_files__': anything(), # only used internaly
     'globals': {
@@ -345,7 +359,7 @@ mapproxy_yaml_spec = {
     },
     'caches': {
         anything(): {
-            required('sources'): [string_type],
+            required('sources'): one_of([string_type], band_sources),
             'name': str(),
             'grids': [str()],
             'cache_dir': str(),
@@ -472,6 +486,17 @@ mapproxy_yaml_spec = {
                 'layers': one_of(str(), [str()]),
                 'use_mapnik2': bool(),
                 'scale_factor': number(),
+            }),
+            'arcgis': combined(source_commons, {
+               required('req'): {
+                    required('url'): str(),
+                    'dpi': int(),
+                    'layers': str(),
+                    'transparent': bool(),
+                    'time': str()
+                },
+                'supported_srs': [str()],
+                'http': http_opts
             }),
             'debug': {
             },

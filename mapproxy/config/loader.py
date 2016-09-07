@@ -1,5 +1,5 @@
 # This file is part of the MapProxy project.
-# Copyright (C) 2010-2012 Omniscale <http://omniscale.de>
+# Copyright (C) 2010-2016 Omniscale <http://omniscale.de>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -595,6 +595,40 @@ def resolution_range(conf):
                                 max_scale=conf.get('max_scale'))
 
 
+class ArcGISSourceConfiguration(SourceConfiguration):
+    source_type = ('arcgis',)
+    def __init__(self, conf, context):
+        SourceConfiguration.__init__(self, conf, context)
+
+    def source(self, params=None):
+        from mapproxy.client.arcgis import ArcGISClient
+        from mapproxy.source.arcgis import ArcGISSource
+        from mapproxy.srs import SRS
+        from mapproxy.request.arcgis import create_request
+
+        # Get the supported SRS codes and formats from the configuration.
+        supported_srs = [SRS(code) for code in self.conf.get("supported_srs", [])]
+        supported_formats = [file_ext(f) for f in self.conf.get("supported_formats", [])]
+
+        # Construct the parameters
+        if params is None:
+            params = {}
+
+        request_format = self.conf['req'].get('format')
+        if request_format:
+            params['format'] = request_format
+
+        request = create_request(self.conf["req"], params)
+        http_client, request.url = self.http_client(request.url)
+        coverage = self.coverage()
+
+        client = ArcGISClient(request, http_client)
+        image_opts = self.image_opts(format=params.get('format'))
+        return ArcGISSource(client, image_opts=image_opts, coverage=coverage,
+                            supported_srs=supported_srs,
+                            supported_formats=supported_formats or None)
+
+
 class WMSSourceConfiguration(SourceConfiguration):
     source_type = ('wms',)
 
@@ -896,6 +930,7 @@ class DebugSourceConfiguration(SourceConfiguration):
 
 source_configuration_types = {
     'wms': WMSSourceConfiguration,
+    'arcgis': ArcGISSourceConfiguration,
     'tile': TileSourceConfiguration,
     'debug': DebugSourceConfiguration,
     'mapserver': MapServerSourceConfiguration,
@@ -1135,6 +1170,92 @@ class CacheConfiguration(ConfigurationBase):
             image_opts=image_opts, tiled_only=tiled_only)
         return source
 
+    def _sources_for_grid(self, source_names, grid_conf, request_format):
+        sources = []
+        source_image_opts = []
+
+        # a cache can directly access source tiles when _all_ sources are caches too
+        # and when they have compatible grids by using tiled_only on the CacheSource
+        # check if all sources support tiled_only
+        tiled_only = True
+        for source_name in source_names:
+            if source_name in self.context.sources:
+                tiled_only = False
+                break
+            elif source_name in self.context.caches:
+                cache_conf = self.context.caches[source_name]
+                tiled_only = cache_conf.supports_tiled_only_access(
+                    params={'format': request_format},
+                    tile_grid=grid_conf.tile_grid(),
+                )
+                if not tiled_only:
+                    break
+
+        for source_name in source_names:
+            if source_name in self.context.sources:
+                source_conf = self.context.sources[source_name]
+                source = source_conf.source({'format': request_format})
+            elif source_name in self.context.caches:
+                cache_conf = self.context.caches[source_name]
+                source = cache_conf.source(
+                    params={'format': request_format},
+                    tile_grid=grid_conf.tile_grid(),
+                    tiled_only=tiled_only,
+                )
+            else:
+                raise ConfigurationError('unknown source %s' % source_name)
+            if source:
+                sources.append(source)
+                source_image_opts.append(source.image_opts)
+
+        return sources, source_image_opts
+
+    def _sources_for_band_merge(self, sources_conf, grid_conf, request_format):
+        from mapproxy.image.merge import BandMerger
+
+        source_names = []
+
+        for band, band_sources in iteritems(sources_conf):
+            for source in band_sources:
+                name = source['source']
+                if name in source_names:
+                    idx = source_names.index(name)
+                else:
+                    source_names.append(name)
+                    idx = len(source_names) - 1
+
+                source["src_idx"] = idx
+
+        sources, source_image_opts = self._sources_for_grid(
+            source_names=source_names,
+            grid_conf=grid_conf,
+            request_format=request_format,
+        )
+
+        if 'l' in sources_conf:
+            mode = 'L'
+        elif 'a' in sources_conf:
+            mode = 'RGBA'
+        else:
+            mode = 'RGB'
+
+        band_merger = BandMerger(mode=mode)
+        available_bands = {'r': 0, 'g': 1, 'b': 2, 'a': 3, 'l': 0}
+        for band, band_sources in iteritems(sources_conf):
+            band_idx = available_bands.get(band)
+            if band_idx is None:
+                raise ConfigurationError("unsupported band '%s' for cache %s"
+                    % (band, self.conf['name']))
+            for source in band_sources:
+                band_merger.add_ops(
+                    dst_band=band_idx,
+                    src_img=source['src_idx'],
+                    src_band=source['band'],
+                    factor=source.get('factor', 1.0),
+                )
+
+        return band_merger.merge, sources, source_image_opts
+
     @memoize
     def caches(self):
         from mapproxy.cache.dummy import DummyCache, DummyLocker
@@ -1165,43 +1286,21 @@ class CacheConfiguration(ConfigurationBase):
 
         renderd_address = self.context.globals.get_value('renderd.address', self.conf)
 
+        band_merger = None
         for grid_name, grid_conf in self.grid_confs():
-            sources = []
-            source_image_opts = []
+            if isinstance(self.conf['sources'], dict):
+                band_merger, sources, source_image_opts = self._sources_for_band_merge(
+                    self.conf['sources'],
+                    grid_conf=grid_conf,
+                    request_format=request_format,
+                )
+            else:
+                sources, source_image_opts = self._sources_for_grid(
+                    self.conf['sources'],
+                    grid_conf=grid_conf,
+                    request_format=request_format,
+                )
 
-            # a cache can directly access source tiles when _all_ sources are caches too
-            # and when they have compatible grids by using tiled_only on the CacheSource
-            # check if all sources support tiled_only
-            tiled_only = True
-            for source_name in self.conf['sources']:
-                if source_name in self.context.sources:
-                    tiled_only = False
-                    break
-                elif source_name in self.context.caches:
-                    cache_conf = self.context.caches[source_name]
-                    tiled_only = cache_conf.supports_tiled_only_access(
-                        params={'format': request_format},
-                        tile_grid=grid_conf.tile_grid(),
-                    )
-                    if not tiled_only:
-                        break
-
-            for source_name in self.conf['sources']:
-                if source_name in self.context.sources:
-                    source_conf = self.context.sources[source_name]
-                    source = source_conf.source({'format': request_format})
-                elif source_name in self.context.caches:
-                    cache_conf = self.context.caches[source_name]
-                    source = cache_conf.source(
-                        params={'format': request_format},
-                        tile_grid=grid_conf.tile_grid(),
-                        tiled_only=tiled_only,
-                    )
-                else:
-                    raise ConfigurationError('unknown source %s' % source_name)
-                if source:
-                    sources.append(source)
-                    source_image_opts.append(source.image_opts)
             if not sources:
                 from mapproxy.source import DummySource
                 sources = [DummySource()]
@@ -1239,8 +1338,13 @@ class CacheConfiguration(ConfigurationBase):
 
                 lock_timeout = self.context.globals.get_value('http.client_timeout', {})
                 locker = TileLocker(lock_dir, lock_timeout, identifier + '_renderd')
+                # TODO band_merger
                 tile_creator_class = partial(RenderdTileCreator, renderd_address,
                     priority=priority, tile_locker=locker)
+
+            else:
+                from mapproxy.cache.tile import TileCreator
+                tile_creator_class = partial(TileCreator, image_merger=band_merger)
 
             if isinstance(cache, DummyCache):
                 locker = DummyLocker()
@@ -1502,6 +1606,15 @@ def extents_for_srs(bbox_srs):
 
 
 class ServiceConfiguration(ConfigurationBase):
+    def __init__(self, conf, context):
+        if 'wms' in conf:
+            if conf['wms'] is None:
+                conf['wms'] = {}
+            if 'md' not in conf['wms']:
+                conf['wms']['md'] = {'title': 'MapProxy WMS'}
+
+        ConfigurationBase.__init__(self, conf, context)
+
     def services(self):
         services = []
         ows_services = []
@@ -1619,7 +1732,7 @@ class ServiceConfiguration(ConfigurationBase):
         for format in image_formats_names:
             opts = self.context.globals.image_options.image_opts({}, format)
             if opts.format in image_formats:
-                log.warn('duplicate mime-type for WMS image_formats: "%s" already configured',
+                log.warn('duplicate mime-type for WMS image_formats: "%s" already configured, will use last format',
                     opts.format)
             image_formats[opts.format] = opts
         info_types = conf.get('featureinfo_types')

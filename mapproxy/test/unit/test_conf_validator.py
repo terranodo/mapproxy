@@ -101,6 +101,18 @@ class TestValidator(object):
             'Missing services section'
         ])
 
+    def test_tile_source(self):
+        conf = self._test_conf('''
+            layers:
+                - name: one
+                  tile_sources: [missing]
+        ''')
+
+        errors = validate_references(conf)
+        eq_(errors, [
+            "Tile source 'missing' for layer 'one' not in cache section"
+        ])
+
     def test_missing_grid(self):
         conf = self._test_conf('''
             caches:
@@ -329,3 +341,37 @@ class TestValidator(object):
 
         errors = validate_references(conf)
         eq_(errors, [])
+
+    def test_band_merge_missing_source(self):
+        conf = self._test_conf('''
+            caches:
+                one_cache:
+                    sources:
+                        l:
+                            - source: dop
+                              band: 1
+                              factor: 0.4
+                            - source: missing1
+                              band: 2
+                              factor: 0.2
+                            - source: cache_missing_source
+                              band: 2
+                              factor: 0.2
+                    grids: [GLOBAL_MERCATOR]
+                cache_missing_source:
+                    sources: [missing2]
+                    grids: [GLOBAL_MERCATOR]
+
+            sources:
+                dop:
+                    type: wms
+                    req:
+                        url: http://localhost/service?
+                        layers: dop
+        ''')
+
+        errors = validate_references(conf)
+        eq_(errors, [
+            "Source 'missing1' for cache 'one_cache' not found in config",
+            "Source 'missing2' for cache 'cache_missing_source' not found in config",
+        ])
