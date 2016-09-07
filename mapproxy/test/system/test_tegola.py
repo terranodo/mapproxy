@@ -27,14 +27,15 @@ class TestTegola(SystemTest):
     config = test_config
 
     def test_get_cached_tile_content_type(self):
-        resp = self.app.get('/tms/1.0.0/terranodo/webmercator/0/0/1.pbf')
+        resp = self.app.get('/tms/1.0.0/terranodo/webmercator/15/17031/1109.pbf')
         eq_(resp.content_type, 'application/x-protobuf')
 
     def test_get_cached_tile_content_length(self):
-        resp = self.app.get('/tms/1.0.0/terranodo/webmercator/0/0/1.pbf')
+        resp = self.app.get('/tms/1.0.0/terranodo/webmercator/15/17031/1109.pbf')
         eq_(resp.content_length, len(resp.body))
 
     def test_get_cached_tile_is_vector_tile(self):
-        resp = self.app.get('/tms/1.0.0/terranodo/webmercator/0/0/1.pbf')
+        resp = self.app.get('/tms/1.0.0/terranodo/webmercator/15/17031/1109.pbf')
         data = BytesIO(resp.body)
+
 	assert is_vector_tile(data)

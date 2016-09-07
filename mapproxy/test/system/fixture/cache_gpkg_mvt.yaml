@@ -54,10 +54,12 @@ caches:
 sources:
   terranodo:
     type: tile
-    url: http://localhost:9090/maps/world_borders/%(z)s/%(x)s/%(y)s.vector.pbf?debug=true
+    url: https://tegola.cfapps.io/maps/bonn_osm/%(z)s/%(x)s/%(y)s.vector.pbf?debug=true
     image:
         format: application/pbf
 grids:
     webmercator:
         srs: EPSG:900913
 globals:
+    http:
+        ssl_no_cert_checks: True
