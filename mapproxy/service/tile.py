@@ -83,7 +83,11 @@ class TileServer(Server):
         tile = layer.render(tile_request, use_profiles=tile_request.use_profiles, coverage=limit_to, decorate_img=decorate_img)
 
         tile_format = getattr(tile, 'format', tile_request.format)
-        resp = Response(tile.as_buffer(), content_type='image/' + tile_format)
+	if tile_format == 'pbf':
+	    content_type = 'application/x-protobuf'
+	else:
+	    content_type = 'image/' + tile_format
+        resp = Response(tile.as_buffer(), content_type=content_type)
         if tile.cacheable:
             resp.cache_headers(tile.timestamp, etag_data=(tile.timestamp, tile.size),
                                max_age=self.max_tile_age)

@@ -61,7 +61,7 @@ class ImageOptions(object):
 
 class MVTFormat(str):
     def __new__(cls, value, *args, **keywargs):
-        if isinstance(value, ImageFormat):
+        if isinstance(value, MVTFormat):
             return value
         return str.__new__(cls, value)
 
