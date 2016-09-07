@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 from mapproxy.template import template_loader, bunch
 get_template = template_loader(__name__, 'templates')
 
+
 class TileServer(Server):
     """
     A Tile Server. Supports strict TMS and non-TMS requests. The difference is the
@@ -82,7 +83,11 @@ class TileServer(Server):
         tile = layer.render(tile_request, use_profiles=tile_request.use_profiles, coverage=limit_to, decorate_img=decorate_img)
 
         tile_format = getattr(tile, 'format', tile_request.format)
-        resp = Response(tile.as_buffer(), content_type='image/' + tile_format)
+	if tile_format == 'pbf':
+	    content_type = 'application/x-protobuf'
+	else:
+	    content_type = 'image/' + tile_format
+        resp = Response(tile.as_buffer(), content_type=content_type)
         if tile.cacheable:
             resp.cache_headers(tile.timestamp, etag_data=(tile.timestamp, tile.size),
                                max_age=self.max_tile_age)
@@ -202,6 +207,7 @@ class TileServer(Server):
         template = get_template(self.root_resource_template_file)
         return template.substitute(service=bunch(default='', **service))
 
+
 class TileLayer(object):
     def __init__(self, name, title, md, tile_manager, dimensions=None):
         """
@@ -287,7 +293,6 @@ class TileLayer(object):
             raise RequestError('invalid format (%s). this tile set only supports (%s)'
                                % (tile_request.format, self.format), request=tile_request,
                                code='InvalidParameterValue')
-
         tile_coord = self._internal_tile_coord(tile_request, use_profiles=use_profiles)
 
         coverage_intersects = False
