@@ -32,12 +32,12 @@ class S3Connection:
                 except boto.provider.ProfileNotFoundError:
                     raise Error('S3: Profile no found %s' % e)
                 except Exception as e:
-                    raise Error('S3: Error during connection %s' % e)
+                    raise ValueError('S3: Error during connection %s' % e)
             else:
                 try:
                     self.conn = boto.connect_s3()
                 except boto.exception.NoAuthHandlerFound as e:
-                    raise Error('S3: No handler found %s' % e)
+                    raise ValueError('S3: No handler found %s' % e)
 
         return self.conn
 
