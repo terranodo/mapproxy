@@ -176,16 +176,16 @@ class HTTPClient(object):
     def open_image(self, url, data=None):
         resp = self.open(url, data=data)
         if 'content-type' in resp.headers:
-            content_type = resp.headers['content-type'].lower()
-            img_content_type = content_type.startswith('image')
-            protobuf_content_type = content_type.endswith('x-protobuf')
+	    content_type = resp.headers['content-type'].lower()
+	    img_content_type = content_type.startswith('image')
+	    protobuf_content_type = content_type.endswith('x-protobuf')
 
             if not img_content_type and not protobuf_content_type:
                 raise HTTPClientError(
-                    'response is not a valid content-type: (%s)' % (content_type,)
-                )
+		    'response is not a valid content-type: (%s)' % (content_type,)
+		)
 
-        # TODO(mvv): consider returning TileSource if application/x-protobuf
+        # TODO: return TileSource if application/x-protobuf
         return ImageSource(resp)
 
 def auth_data_from_url(url):

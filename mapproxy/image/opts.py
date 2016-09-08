@@ -59,7 +59,6 @@ class ImageOptions(object):
     def copy(self):
         return copy.copy(self)
 
-
 class MVTFormat(str):
     def __new__(cls, value, *args, **keywargs):
         if isinstance(value, MVTFormat):
