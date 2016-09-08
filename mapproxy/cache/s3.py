@@ -53,6 +53,7 @@ class S3Cache(FileCache):
                  lock_timeout=60.0, bucket_name='mapproxy', profile_name=None):
         """
         :param cache_dir: the path where the tile will be stored
+
         :param file_ext: the file extension that will be appended to
             each tile (e.g. 'png')
         """
@@ -66,7 +67,7 @@ class S3Cache(FileCache):
         try:
             self.bucket = conn.get_bucket(bucket_name)
         except boto.exception.S3ResponseError as e:
-            log.error("Fuck %s" % e.error_code)
+            log.error("Error: %s" % e.error_code)
             if e.error_code == 'NoSuchBucket':
                 log.error('No such bucket: %s' % bucket_name)
                 raise e
